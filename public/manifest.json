@@ -1,0 +1,40 @@
+{
+  "manifest_version": 3,
+  "name": "侧边栏浏览器",
+  "description": "在Chrome浏览器侧边栏中浏览网页",
+  "version": "1.0.0",
+  "icons": {
+    "16": "vite.svg",
+    "48": "vite.svg",
+    "128": "vite.svg"
+  },
+  "action": {
+    "default_title": "侧边栏浏览器"
+  },
+  "permissions": [
+    "sidePanel",
+    "storage",
+    "favicon",
+    "declarativeNetRequest",
+    "declarativeNetRequestFeedback",
+    "tabs",
+    "commands",
+    "activeTab",
+    "webRequest",
+    "bookmarks"
+  ],
+  "web_accessible_resources": [
+    {
+      "matches": ["<all_urls>"],
+      "resources": ["index.html"],
+      "use_dynamic_url": true
+    }
+  ],
+  "host_permissions": ["<all_urls>"],
+  "side_panel": {
+    "default_path": "index.html"
+  },
+  "background": {
+    "service_worker": "background.js"
+  }
+}
