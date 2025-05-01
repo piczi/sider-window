@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, memo, useCallback } from "react";
 import { Box, Spinner } from "@chakra-ui/react";
 
 interface BrowserProps {
@@ -11,10 +11,9 @@ const Browser = ({ url, onUrlChange, onTitleChange }: BrowserProps) => {
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
-  useEffect(() => {
+  const handleLoad = useCallback(() => {
     const iframe = iframeRef.current;
     if (iframe) {
-      const handleLoad = () => {
         setIsLoading(false);
 
         try {
@@ -65,8 +64,12 @@ const Browser = ({ url, onUrlChange, onTitleChange }: BrowserProps) => {
           // 可能会因为跨域限制导致错误，忽略这些错误
           console.log("无法访问iframe内容，可能是跨域限制");
         }
-      };
+    }
+  }, [onUrlChange, onTitleChange]);
 
+  useEffect(() => {
+    const iframe = iframeRef.current;
+    if (iframe) {
       // 添加事件监听器
       iframe.addEventListener("load", handleLoad);
       // 清理函数
@@ -74,7 +77,7 @@ const Browser = ({ url, onUrlChange, onTitleChange }: BrowserProps) => {
         iframe.removeEventListener("load", handleLoad);
       };
     }
-  }, []); // 只在挂载时运行一次
+  }, [handleLoad]); // 依赖于 handleLoad
 
   // 当URL更改时重置加载状态
   useEffect(() => {
@@ -109,4 +112,4 @@ const Browser = ({ url, onUrlChange, onTitleChange }: BrowserProps) => {
   );
 };
 
-export default Browser; 
+export default memo(Browser); 

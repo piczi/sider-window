@@ -69,7 +69,7 @@ function App() {
 				if (iframeRef.current?.contentDocument?.title) {
 					title = iframeRef.current.contentDocument.title;
 				}
-			} catch (error) {
+			} catch (_error) {
 				// 忽略跨域错误，使用默认标题
 				console.log('无法获取页面标题，使用默认标题');
 			}
@@ -96,7 +96,7 @@ function App() {
 
 	// 处理设置保存并更新主页
 	const handleSaveSettings = () => {
-		saveSettings((newUrl) => {
+		saveSettings((newUrl: string) => {
 			setNavigationUrl(newUrl);
 			
 			if (iframeRef.current) {

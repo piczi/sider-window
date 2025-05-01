@@ -5,6 +5,7 @@ import {
   InputRightElement, 
   IconButton 
 } from "@chakra-ui/react";
+import { memo } from "react";
 import { SearchIcon, StarIcon, SettingsIcon } from "@chakra-ui/icons";
 
 interface AddressBarProps {
@@ -66,4 +67,4 @@ const AddressBar = ({
   );
 }
 
-export default AddressBar; 
+export default memo(AddressBar); 
