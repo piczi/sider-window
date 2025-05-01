@@ -58,9 +58,28 @@ function App() {
 
 	// 添加当前页面到书签
 	const handleAddBookmark = () => {
-		if (iframeRef.current) {
-			const title = iframeRef.current.contentDocument?.title || currentUrl;
+		try {
+			// 从 URL 中提取域名作为默认标题
+			const urlObj = new URL(currentUrl);
+			const defaultTitle = urlObj.hostname.replace('www.', '');
+			
+			// 尝试从 iframe 获取标题，如果失败则使用默认标题
+			let title = defaultTitle;
+			try {
+				if (iframeRef.current?.contentDocument?.title) {
+					title = iframeRef.current.contentDocument.title;
+				}
+			} catch (error) {
+				// 忽略跨域错误，使用默认标题
+				console.log('无法获取页面标题，使用默认标题');
+			}
+			
+			// 添加时间戳使标题更唯一
+			title = `${title} - ${new Date().toLocaleString()}`;
+			
 			addBookmark(title, currentUrl);
+		} catch (error) {
+			console.error('添加书签失败:', error);
 		}
 	};
 
