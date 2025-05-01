@@ -26,10 +26,23 @@ import {
   TabList,
   TabPanels,
   Tab,
-  TabPanel
+  TabPanel,
+  useColorMode,
+  useColorModeValue,
+  Button
 } from '@chakra-ui/react';
-import { SearchIcon, StarIcon } from '@chakra-ui/icons';
+import { SearchIcon, StarIcon, MoonIcon, SunIcon, SettingsIcon } from '@chakra-ui/icons';
+import { extendTheme, type ThemeConfig } from '@chakra-ui/react';
 import './App.css';
+
+// 定义主题配置
+const config: ThemeConfig = {
+  initialColorMode: 'system',
+  useSystemColorMode: true,
+};
+
+// 扩展主题
+const theme = extendTheme({ config });
 
 interface Bookmark {
   id: string;
@@ -53,16 +66,34 @@ function App() {
   const [chromeBookmarks, setChromeBookmarks] = useState<BookmarkTreeNode[]>([]);
   const [loadingBookmarks, setLoadingBookmarks] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [defaultHomepage, setDefaultHomepage] = useState<string>('https://www.google.com');
+  const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
+  const [tempHomepage, setTempHomepage] = useState<string>('');
+  
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const { isOpen, onOpen, onClose } = useDisclosure();
   const toast = useToast();
-
-  // 从Chrome存储中加载自定义书签
+  const { colorMode, toggleColorMode } = useColorMode();
+  
+  const inputBgColor = useColorModeValue('white', 'gray.700');
+  
+  // 从Chrome存储中加载保存的设置
   useEffect(() => {
     if (chrome.storage && chrome.storage.sync) {
-      chrome.storage.sync.get(['bookmarks'], (result) => {
+      chrome.storage.sync.get(['bookmarks', 'defaultHomepage'], (result) => {
         if (result.bookmarks) {
           setBookmarks(result.bookmarks);
+        }
+        
+        if (result.defaultHomepage) {
+          setDefaultHomepage(result.defaultHomepage);
+          setTempHomepage(result.defaultHomepage);
+          setUrl(result.defaultHomepage);
+          setCurrentUrl(result.defaultHomepage);
+          
+          if (iframeRef.current) {
+            iframeRef.current.src = result.defaultHomepage;
+          }
         }
       });
     }
@@ -89,10 +120,47 @@ function App() {
   
   // 在打开书签抽屉时自动加载Chrome书签
   useEffect(() => {
-    if (isOpen && chromeBookmarks.length === 0) {
+    if (isOpen) {
       loadChromeBookmarks();
     }
   }, [isOpen]);
+
+  // 延迟渲染书签树，确保加载完成后再显示
+  const [bookmarksReady, setBookmarksReady] = useState<boolean>(false);
+  
+  useEffect(() => {
+    if (chromeBookmarks.length > 0 && !bookmarksReady) {
+      // 给书签内容一点时间加载完全
+      const timer = setTimeout(() => {
+        setBookmarksReady(true);
+      }, 300);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [chromeBookmarks]);
+  
+  // 获取顶层书签文件夹的索引，以便默认展开
+  const getDefaultExpandedIndices = (bookmarks: BookmarkTreeNode[]): number[] => {
+    const indices: number[] = [];
+    // 默认仅展开前1-2个主要书签文件夹
+    if (bookmarks && bookmarks.length > 0 && bookmarks[0].children) {
+      // 书签栏通常是第一个子节点
+      const bookmarkBar = bookmarks[0].children.findIndex(node => 
+        node.title === "书签栏" || 
+        node.title === "Bookmarks Bar" || 
+        node.title === "书签栏" ||
+        node.title.includes("Bookmark")
+      );
+      
+      if (bookmarkBar !== -1) {
+        indices.push(bookmarkBar);
+      } else if (bookmarks[0].children.length > 0) {
+        // 如果找不到书签栏，就展开第一个文件夹
+        indices.push(0);
+      }
+    }
+    return indices;
+  };
 
   // 处理iframe加载事件
   useEffect(() => {
@@ -212,6 +280,11 @@ function App() {
 
   // 渲染书签树节点的递归组件
   const renderBookmarkTreeNode = (node: BookmarkTreeNode) => {
+    // 为深色模式优化的hover颜色
+    const hoverBgColor = useColorModeValue('gray.100', 'gray.700');
+    const textHoverColor = useColorModeValue('blue.500', 'blue.200');
+    const borderColor = useColorModeValue('gray.200', 'gray.600');
+    
     // 如果节点有URL，则它是一个书签
     if (node.url) {
       return (
@@ -222,6 +295,7 @@ function App() {
           display="flex"
           alignItems="center"
           className="bookmark-item"
+          _hover={{ bg: hoverBgColor }}
         >
           <Box mr={2}>
             <img 
@@ -240,7 +314,7 @@ function App() {
             isTruncated
             cursor="pointer"
             onClick={() => openBookmark(node.url!)}
-            _hover={{ color: 'blue.500', textDecoration: 'underline' }}
+            _hover={{ color: textHoverColor, textDecoration: 'underline' }}
           >
             {node.title || '无标题'}
           </Text>
@@ -252,14 +326,14 @@ function App() {
     if (node.children && node.children.length > 0) {
       return (
         <AccordionItem key={node.id} border="none">
-          <AccordionButton py={1} px={2} borderRadius="md" _hover={{ bg: 'gray.100' }}>
+          <AccordionButton py={1} px={2} borderRadius="md" _hover={{ bg: hoverBgColor }}>
             <Box flex="1" textAlign="left" fontSize="sm" fontWeight="medium">
               {node.title}
             </Box>
             <AccordionIcon />
           </AccordionButton>
           <AccordionPanel pb={2} pt={1} px={1}>
-            <VStack spacing={1} align="stretch" pl={2} borderLeftWidth="2px" borderLeftColor="gray.200">
+            <VStack spacing={1} align="stretch" pl={2} borderLeftWidth="2px" borderLeftColor={borderColor}>
               {node.children.map(childNode => renderBookmarkTreeNode(childNode))}
             </VStack>
           </AccordionPanel>
@@ -275,21 +349,60 @@ function App() {
     );
   };
 
+  // 处理设置界面打开和关闭
+  const handleSettingsOpen = () => {
+    setTempHomepage(defaultHomepage);
+    setIsSettingsOpen(true);
+  };
+
+  const handleSettingsClose = () => {
+    setIsSettingsOpen(false);
+  };
+
+  // 处理默认主页输入
+  const handleHomepageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setTempHomepage(e.target.value);
+  };
+
+  // 保存设置
+  const saveSettings = () => {
+    setDefaultHomepage(tempHomepage);
+    setUrl(tempHomepage);
+    setCurrentUrl(tempHomepage);
+    
+    if (iframeRef.current) {
+      iframeRef.current.src = tempHomepage;
+    }
+    
+    if (chrome.storage && chrome.storage.sync) {
+      chrome.storage.sync.set({ defaultHomepage: tempHomepage }, () => {
+        toast({
+          title: "设置已保存",
+          status: "success",
+          duration: 2000,
+          isClosable: true,
+        });
+      });
+    }
+    
+    setIsSettingsOpen(false);
+  };
+
   return (
-    <ChakraProvider>
+    <ChakraProvider theme={theme}>
       <Box height="100vh" display="flex" flexDirection="column">
         {/* 地址栏和书签按钮 */}
         <Box p={2} borderBottom="1px" borderColor="gray.200">
           <form onSubmit={handleNavigate}>
             <InputGroup size="md">
               <Input
-                pr="4.5rem"
+                pr="7rem"
                 type="text"
                 placeholder="输入网址或搜索"
                 value={url}
                 onChange={handleUrlChange}
               />
-              <InputRightElement width="4.5rem">
+              <InputRightElement width="7rem">
                 <IconButton
                   h="1.75rem"
                   size="sm"
@@ -305,6 +418,15 @@ function App() {
                   aria-label="Bookmark"
                   icon={<StarIcon />}
                   onClick={onOpen}
+                />
+                <IconButton
+                  h="1.75rem"
+                  size="sm"
+                  ml={1}
+                  colorScheme="blue"
+                  aria-label="Settings"
+                  icon={<SettingsIcon />}
+                  onClick={handleSettingsOpen}
                 />
               </InputRightElement>
             </InputGroup>
@@ -358,6 +480,7 @@ function App() {
                             display="flex" 
                             alignItems="center"
                             className="bookmark-item"
+                            _hover={{ bg: useColorModeValue('gray.100', 'gray.700') }}
                           >
                             {bookmark.favicon && (
                               <Box mr={2}>
@@ -368,7 +491,7 @@ function App() {
                               <Text 
                                 cursor="pointer" 
                                 onClick={() => openBookmark(bookmark.url)}
-                                _hover={{ color: 'blue.500', textDecoration: 'underline' }}
+                                _hover={{ color: useColorModeValue('blue.500', 'blue.200'), textDecoration: 'underline' }}
                               >
                                 {bookmark.title || bookmark.url}
                               </Text>
@@ -378,7 +501,10 @@ function App() {
                               colorScheme="red"
                               aria-label="Remove bookmark"
                               icon={<Text>✕</Text>}
-                              onClick={() => removeBookmark(bookmark.id)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                removeBookmark(bookmark.id);
+                              }}
                             />
                           </Box>
                         ))
@@ -389,11 +515,11 @@ function App() {
                         p={2} 
                         borderWidth="1px" 
                         borderRadius="md" 
-                        backgroundColor="blue.50"
+                        backgroundColor={useColorModeValue('blue.50', 'blue.900')}
                         textAlign="center"
                         cursor="pointer"
                         onClick={addBookmark}
-                        _hover={{ backgroundColor: 'blue.100' }}
+                        _hover={{ backgroundColor: useColorModeValue('blue.100', 'blue.800') }}
                       >
                         添加当前页面到书签
                       </Box>
@@ -407,26 +533,59 @@ function App() {
                         <Spinner size="md" color="blue.500" />
                         <Text mt={2}>加载中...</Text>
                       </Box>
-                    ) : chromeBookmarks.length > 0 ? (
+                    ) : chromeBookmarks.length > 0 && bookmarksReady ? (
                       <Box maxH="70vh" overflow="auto">
-                        <Accordion allowMultiple defaultIndex={[]}>
+                        <Accordion allowMultiple defaultIndex={getDefaultExpandedIndices(chromeBookmarks)}>
                           {chromeBookmarks.map(node => renderBookmarkTreeNode(node))}
                         </Accordion>
                       </Box>
                     ) : (
                       <VStack spacing={4} py={4} align="center">
-                        <Text color="gray.500">未能加载浏览器书签</Text>
-                        <IconButton
-                          colorScheme="blue"
-                          aria-label="Reload bookmarks"
-                          icon={<SearchIcon />}
-                          onClick={loadChromeBookmarks}
-                        />
+                        <Text color="gray.500">{chromeBookmarks.length > 0 ? "准备中..." : "未能加载浏览器书签"}</Text>
+                        {chromeBookmarks.length === 0 && (
+                          <IconButton
+                            colorScheme="blue"
+                            aria-label="Reload bookmarks"
+                            icon={<SearchIcon />}
+                            onClick={loadChromeBookmarks}
+                          />
+                        )}
+                        {chromeBookmarks.length > 0 && <Spinner size="sm" color="blue.500" />}
                       </VStack>
                     )}
                   </TabPanel>
                 </TabPanels>
               </Tabs>
+            </DrawerBody>
+          </DrawerContent>
+        </Drawer>
+
+        {/* 设置抽屉 */}
+        <Drawer isOpen={isSettingsOpen} placement="right" onClose={handleSettingsClose} size="md">
+          <DrawerOverlay />
+          <DrawerContent>
+            <DrawerCloseButton />
+            <DrawerHeader borderBottomWidth="1px">设置</DrawerHeader>
+            <DrawerBody p={2}>
+              <VStack spacing={4} align="stretch">
+                <Box>
+                  <Text mb={2}>默认主页</Text>
+                  <Input
+                    type="text"
+                    placeholder="输入默认主页"
+                    value={tempHomepage}
+                    onChange={handleHomepageChange}
+                    bg={inputBgColor}
+                  />
+                </Box>
+                <Box>
+                  <Text mb={2}>主题</Text>
+                  <Button onClick={toggleColorMode}>
+                    {colorMode === 'light' ? <MoonIcon /> : <SunIcon />}
+                  </Button>
+                </Box>
+                <Button colorScheme="blue" onClick={saveSettings}>保存设置</Button>
+              </VStack>
             </DrawerBody>
           </DrawerContent>
         </Drawer>
