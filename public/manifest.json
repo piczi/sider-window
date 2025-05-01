@@ -4,9 +4,9 @@
   "description": "在Chrome浏览器侧边栏中浏览网页",
   "version": "1.0.0",
   "icons": {
-    "16": "vite.svg",
-    "48": "vite.svg",
-    "128": "vite.svg"
+    "16": "icons/icon.png",
+    "48": "icons/icon.png",
+    "128": "icons/icon.png"
   },
   "action": {
     "default_title": "侧边栏浏览器"
